@@ -1,0 +1,19 @@
+{
+  "name": "create-multiple-window-electron-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "dependencies": {
+    "electron": "^12.0.9",
+    "electron-settings": "^4.0.2",
+    "ws": "^7.4.6"
+  },
+  "devDependencies": {
+    "electron": "^12.0.9"
+  },
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "william",
+  "license": "ISC"
+}

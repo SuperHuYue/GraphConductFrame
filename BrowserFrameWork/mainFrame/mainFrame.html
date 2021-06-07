@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- <link rel="stylesheet" type="text/css" href=" ./mainFrame.css" /> -->
+    <link rel="stylesheet" type="text/css" href="./mainFrame.css" />
+    <title>AllUseCheckFrameWork</title>
+</head>
+
+<body>
+    <div ID="mainFrame">
+        <div class="MenuBar">
+            MenuBar
+        </div>
+        <div class="PosBar">
+            PosBar
+        </div>
+        <div class="ImgContainer" id='ImgContainer1'>
+            <img class="ShowContainer" src="../WebSocketParaSetting/img/init.jpg" , alt="stream">
+        </div>
+        <div class="AlgorithmStatus">
+            AlgorithmStatus
+        </div>
+        <div class="ConnectStatus">
+            ConnectStatus
+        </div>
+        <div class="DebugStatus">
+            DebugStatus
+        </div>
+        <div ID="TreeViewOne">
+            TreeViewOne
+        </div>
+    </div>
+    <script>
+        //必须用require引入否则会出现重复载入的问题
+        require('./mainFrame.js')
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,25 @@
+{
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "files.associations": {
+        "memory": "cpp",
+        "map": "cpp",
+        "exception": "cpp",
+        "iosfwd": "cpp",
+        "cstddef": "cpp",
+        "xtree": "cpp",
+        "utility": "cpp",
+        "xstring": "cpp",
+        "deque": "cpp",
+        "forward_list": "cpp",
+        "fstream": "cpp",
+        "list": "cpp",
+        "string": "cpp",
+        "vector": "cpp",
+        "xhash": "cpp",
+        "xlocbuf": "cpp",
+        "xlocmon": "cpp",
+        "xmemory": "cpp",
+        "*.ipp": "cpp"
+    },
+    "python.pythonPath": "C:\\william\\work\\anaconda\\envs\\atl\\python.exe"
+}
