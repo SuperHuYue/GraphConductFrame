@@ -25,7 +25,10 @@ public:
 		start();
 	};
 	~metaConnection() {
-		stop();
+		//线程join之后不能在此join此处是因为其他地方可能调用stop
+		if (m_thread.joinable()) {
+			stop();
+		}
 	};
 	void start(){
 		m_thread = std::thread([&]() {
