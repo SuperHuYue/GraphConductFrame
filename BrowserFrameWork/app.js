@@ -168,4 +168,14 @@ ipcMain.on('wsWin:Connect', (e, data) => {
     mainWindow.webContents.send('wsWin:Connect', data);
 })
 
+ipcMain.on('wsWin:connectStatus', (e, data) => {
+    var img_id = data.id;
+    var say = data.say;
+    if (WebSocketWin[img_id] != null) {
+        var tar_wsWin = WebSocketWin[img_id];
+        tar_wsWin.webContents.send('wsWin:connectStatus', data);
+    }
+})
+    //  id: this.id, say: sayWhat })
+
 ///end ipc

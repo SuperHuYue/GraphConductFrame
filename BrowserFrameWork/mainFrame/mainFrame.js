@@ -174,21 +174,19 @@ class WSObj {
     init() {
         this.wsEntity = new websocket(this.Uri);
         this.wsEntity.onopen = () => {
+            var sayWhat = 'open..';
+            ipcRenderer.send('wsWin:connectStatus', { id: this.id, say: sayWhat });
             console.log('open..')
         };
         this.wsEntity.onclose = (e) => {
-            console.log('close: reason' + e.reason)
+            console.log("closed...")
+            var sayWhat = 'close..';
+            ipcRenderer.send('wsWin:connectStatus', { id: this.id, say: sayWhat });
+            console.log('close: reason' + e.data);
         };
         this.wsEntity.onmessage = (evt) => {
             var oriStr = evt.data;
             if (typeof (evt.data) != "string") {
-                // var buffer_header = new Uint8Array(evt.data, 0, 9);
-                //  console.log(evt.data)
-                // // console.log("buffer_header: " + buffer_header);
-                // // console.log(buffer_header[0] + " " + buffer_header[1] + " " + buffer_header[2] + " " + buffer_header[3])
-                // var header_size = buffer_header[0] | buffer_header[1] << 8 | (buffer_header[2]) << 16 | (buffer_header[3]) << 32;
-                // // var header_size = buffer_header[0];
-                // var to_size = header_size / 4 - 9;
                 var buffer_header = new Uint8Array(evt.data, 0, 13)
                 var buffer = [];//9header, 1-row,1-col,1-depth,1-piclen
                 for (let i = 0; i < 4 * (9 + 4);) {
@@ -196,35 +194,12 @@ class WSObj {
                     buffer.push(tmp);
                     i += 4;
                 }
-                console.log(buffer);
                 var row = buffer[9];
                 var col = buffer[10];
                 var deepth = buffer[11];
                 var pic_length = buffer[12];
                 var pic_data = new Uint8Array(evt.data.slice(13 * 4, pic_length + 13 * 4));
                 this.Shower(pic_data, this.id);
-                //Customer made data demo is only show pic data
-                // if (this.reader == null) {
-                //     this.reader = new FileReader();
-                //     this.reader.addEventListener("loadend", function (e) {
-                //         console.log(e);
-                //         var buffer_header = new Uint32Array(e.target.result, 0, 10);
-                //         var header_size = parseInt(buffer_header[0]);
-                //         var to_size = header_size / 4 - 10;
-                //         var buffer = new Uint32Array(e.target.result, 0, 10 + to_size + 4);
-                //         var from_id = parseInt(buffer[2]);
-                //         var to_list = [];
-                //         for (var i = 0; i < to_size; ++i) {
-                //             to_list[i] = buffer[i + 10];
-                //         }
-                //         var row = buffer[10 + to_size];
-                //         var col = buffer[11 + to_size];
-                //         var deepth = buffer[12 + to_size];
-                //         var pic_length = parseInt(buffer[13 + to_size]);
-                //         var pic_data = new Uint8Array(e.target.result, (14 + to_size) * 4, pic_length);
-                //     });
-                // }
-                // this.reader.readAsArrayBuffer(new Blob([evt.data], { type: "image/jpeg" }));
 
             }
             else {
