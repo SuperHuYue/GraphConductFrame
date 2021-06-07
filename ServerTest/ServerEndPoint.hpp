@@ -187,10 +187,11 @@ private:
         return false;
     }
 
-    //   //分配ID号并且存储内容
+    //分配ID号并且存储内容,每一次增加新的连接都会对现存connection进行检测, 并分析重名内容是否close如果为close状态则清空缓存
     inline std::pair<bool, int> AddConnection(std::string &alias, websocketpp::connection_hdl hdl)
     {
         ////////////////////////////////////////////////////////////////////////////////////////////////////
+        clearCon(alias);
         std::lock_guard<std::mutex> lk(m_lock);
         if (m_alias2con.find(alias) == m_alias2con.end())
         {
@@ -213,8 +214,49 @@ private:
         }
         return std::make_pair(false, nullptr);
     }
+    //不设定为清空所有，否则仅仅清空对应alias的内容
+    inline void clearCon(const std::string alias = "undefined")
+    {
+        std::lock_guard<std::mutex> lk(m_lock);
+        if (!alias.compare("undefined"))
+        {
+            //清空所有close的连接
+            for (auto i : m_alias2con)
+            {
+                auto con = i.second;
+                if (m_hdl2con.find(con->m_hdl) != m_hdl2con.end())
+                {
+                    if (con->m_status == metaConnection::connectionStatus::CLOSE)
+                    {
+                        m_hdl2con.clear();
+                        m_alias2con.clear();
+                    }
+                }
+            }
+        }
+        else
+        {
+            if (m_alias2con.find(alias) != m_alias2con.end())
+            {
+                auto sin_con = m_alias2con[alias];
+                if (m_hdl2con.find(sin_con->m_hdl) != m_hdl2con.end())
+                {
+                    if (sin_con->m_status == metaConnection::connectionStatus::CLOSE)
+                    {
+                        m_hdl2con.erase(sin_con->m_hdl);
+                        m_alias2con.erase(alias);
+                    }
+                }
+                else
+                {
+                    throw std::runtime_error("Err no clearCon don't have equal...");
+                }
+            }
+        }
+    }
 
-    inline std::pair<bool, websocketpp::lib::shared_ptr<metaConnection>> queryConUsingHdl(websocketpp::connection_hdl hdl)
+    inline std::pair<bool, websocketpp::lib::shared_ptr<metaConnection>>
+    queryConUsingHdl(websocketpp::connection_hdl hdl)
     {
         std::lock_guard<std::mutex> lk(m_lock);
         if (m_hdl2con.find(hdl) != m_hdl2con.end())
