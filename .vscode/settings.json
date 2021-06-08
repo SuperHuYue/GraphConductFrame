@@ -21,5 +21,5 @@
         "xmemory": "cpp",
         "*.ipp": "cpp"
     },
-    "python.pythonPath": "C:\\william\\work\\anaconda\\envs\\atl\\python.exe"
+    "python.pythonPath": "C:\\Python39\\python.exe"
 }

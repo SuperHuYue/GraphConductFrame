@@ -114,6 +114,11 @@ async def hello():
         while True:
             #get image bytes data
             ret,img = cap.read()
+            now_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) 
+            img = cv2.putText(img, now_time, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,255,0), 3)
+            cv2.namedWindow("hello",0)
+            cv2.imshow("hello", img)
+            cv2.waitKey(1)
             now_count += 1
             if now_count == total_Frame - 1 or img is None:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)

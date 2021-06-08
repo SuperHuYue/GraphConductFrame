@@ -1,12 +1,7 @@
-
-const { ipcRenderer, TouchBarSlider } = require('electron');
+const { ipcRenderer } = require('electron');
 const websocket = require('ws')
 
-/*
-id:
-obj:
-*/
-var showObjs = {};//展示模块，用于主界面的图像展示
+var wsClient = {};
 var arr = new Array(1);//该变量用于展示目前所拥有的所有分层的对象 
 const IMGCONTAINERNAME = 'ImgContainer1';
 
@@ -14,55 +9,59 @@ ipcRenderer.on("wsWin:ImgData", (e, Img) => {
     Shower(Img);
 });
 
-//页面不会销毁，仅仅是关闭服务
-function wsCloseAll(method = 'ws') {
-    if (showObjs != null) {
-        for (let key in showObjs) {
-            showObjs[key].stop();//
+function wsCloseAll() {
+    if (wsClient != null) {
+        for (let key in wsClient) {
+            if (wsClient[key].wsEntity != null) {
+                wsClient[key].wsEntity.close();
+                wsClient[key].wsEntity = null;
+            }
+        }
+    }
+    // wsClient = null;
+}
+
+//移除该ID，会使得在切分界面时候不会进行重连模块
+function wsRemoveClientID(id) {
+    if (wsClient != null) {
+        for (let key in wsClient) {
+            if (wsClient[key].wsEntity != null && wsClient[ley] == id) {
+                wsClient[key].wsEntity.close();
+                wsClient[key].wsEntity = null;
+                delete wsClient.key;
+            }
         }
     }
 }
-////移除该ID，会使得在切分界面时候不会进行重连模块
-//function wsRemoveClientID(id) {
-//    if (showObjs != null) {
-//        for (let key in showObjs) {
-//            if (showObjs[key].entity != null && showObjs[ley] == id) {
-//                showObjs[key].entity.close();
-//                showObjs[key].entity = null;
-//                delete showObjs.key;
-//            }
-//        }
-//    }
-//}
 
-function connect(tar, id, ip, port, method = 'ws') {
+function wsConnect(tar, id, ip, port) {
     console.log(ip + ", " + port);
-    //tar实际上是一个字典, 代表的是id号和对应的对象
     if (tar == null) {
         tar = {};
     }
-    if ((id in tar)) {
-        tar[id].start();
-    } else {
-        if (method == 'ws') {
-            tar[id] = new WSObj(id, ip, port, "?Alias");
+    if (tar.id == null) {
+        tar.id = id;
+        tar.id.wsEntity = new WSObj(id, ip, port, "?Alias");
+    }
+    else {
+        if (tar.id != null) {
+            if (tar.id.wsEntity != null) {
+                tar.id.wsEntity.close();
+                tar.id.wsEntity = null;
+            }
+            delete tar.id;
         }
-        tar[id].start();
+        tar.id.wsEntity = new WSObj(id, ip, port, "?Alias");
     }
 }
 
 ipcRenderer.on('divShowWin:row', (e, row) => {
-    //重新拆分页面之后的操作步骤
-    //1.关闭对应所有实体,停止通讯工作
-    //2.检查新拆分之后的显示模块与现有的是否存在id相同的部分，如果有则保留，否则delete对应对象，并关闭对应窗口
-    //3.重新分配对应并重连保留下来的模块
     wsCloseAll();
     var imgContainer = document.getElementById(IMGCONTAINERNAME);
     imgContainer.innerHTML = "";
     let show_row = row;
     arr = new Array(show_row);
     ////////////////////////////////////////
-    //重新布局显示
     let sin_height = parseInt(100 / row);
     console.log("hello: " + sin_height);
     for (let i = 0; i < show_row; ++i) {
@@ -91,29 +90,20 @@ ipcRenderer.on('divShowWin:row', (e, row) => {
     }
     ////////////////////////////////////////
     //检查窗口移除不存在对象的id
-    var now_valid_id = [];
-    let rows = imgContainer.childNodes;
-    for (let sin = 0; sin < rows.length; sin++) {//遍历node只能这样用
-        let cols = rows[sin].childNodes;
-        for (let img_idx = 0; img_idx < cols.length; ++img_idx) {
-            let img = cols[img_idx]
-            console.log('fuck: ', img.id)
-            now_valid_id.push(img.id)
-        }
-    }
-    if (showObjs != null) {
-        for (let show_idx in showObjs) {
-            if (now_valid_id.find(element => element == show_idx) == undefined) {
-                //销毁对象
-                delete showObjs[show_idx];
-            } else {
-                //存在对象进行重连 
-                let tar = showObjs[show_idx];
-                console.log('reconnect: ', tar.id);
-                connect(showObjs, tar.id, tar.ip, tar.port);
+    let now_divs = imgContainer.children;
+    var now_Valid_client = {};
+    for (let sin in now_divs) {
+        let now_imgs = sin.children;
+        for (let sin_img in now_imgs) {
+            if (wsClient[sin_img.id] != null) {
+                //reconnect
+                wsConnect(now_Valid_client, sin_img.id, wsClient.sin_img.wsEntity.ip, wsClient.sin_img.wsEntity.port);
             }
         }
     }
+    wsClient = null;
+    wsClient = now_Valid_client;
+
 });
 //在拆分目标的同事对现存对象进行重连
 ipcRenderer.on('divShowWin:idxCol', (e, idxcol) => {
@@ -140,30 +130,22 @@ ipcRenderer.on('divShowWin:idxCol', (e, idxcol) => {
         }
         div.appendChild(img)
     }
+    ////////////////////////////////////////
     //检查窗口移除不存在对象的id
     var imgContainer = document.getElementById(IMGCONTAINERNAME);
-    var now_valid_id = [];
-    let rows = imgContainer.childNodes;
-    for (let sin = 0; sin < rows.length; sin++) {//遍历node只能这样用
-        let cols = rows[sin].childNodes;
-        for (let img_idx = 0; img_idx < cols.length; ++img_idx) {
-            let img = cols[img_idx]
-            now_valid_id.push(img.id)
-        }
-    }
-    if (showObjs != null) {
-        for (let show_idx in showObjs) {
-            if (now_valid_id.find(element => element == show_idx) == undefined) {
-                //销毁对象
-                delete showObjs[show_idx];
-            } else {
-                //存在对象进行重连 
-                let tar = showObjs[show_idx];
-                console.log('reconnect: ', tar.id);
-                connect(showObjs, tar.id, tar.ip, tar.port);
+    let now_divs = imgContainer.children;
+    var now_Valid_client = null;
+    for (let sin in now_divs) {
+        let now_imgs = sin.children;
+        for (let sin_img in now_imgs) {
+            if (wsClient[sin_img.id] != null) {
+                //reconnect
+                wsConnect(now_Valid_client, sin_img.id, wsClient.sin_img.wsEntity.ip, wsClient.sin_img.wsEntity.port);
             }
         }
     }
+    wsClient = null;
+    wsClient = now_Valid_client;
 });
 
 
@@ -172,57 +154,38 @@ ipcRenderer.on('wsWin:Connect', (e, data) => {
     var id = data.wsWinIdentify;
     var ip = data.wsIP;
     var port = data.wsPort;
-    connect(showObjs, id, ip, port);
+    wsConnect(wsClient, id, ip, port);
 });
 
-class baseObj {
-    constructor() {
-        this.method = 'unDefined';
-        this.entity = null;//数据流通（通讯）使用的实体
-        this.id = null;
-    }
-    stop() {
-        //每一个都必须实现这个对象,代表停止该显示对象工作
-    }
-    start() {
-        //每一个对象都必须实现这个对象，代表开始该显示对象工作
-    }
-}
 
-class WSObj extends baseObj {
+
+
+
+class WSObj {
     constructor(id, ip, port, other) {
-        super();
         this.Uri = "ws://" + ip.toString() + ":" + port.toString() + "/" + other.toString() + "=" + id.toString();
         this.ip = ip;
         this.port = port;
         this.other = other;
+        this.wsEntity = null;
         this.reader = null;
-        this.method = 'ws';
         this.id = id;
-        this.entity = null;
-    }
-    start() {
         this.init();
     }
-    stop() {
-        if (this.entity != null) {
-            this.entity.close();
-        }
-    }
     init() {
-        this.entity = new websocket(this.Uri);
-        this.entity.onopen = () => {
+        this.wsEntity = new websocket(this.Uri);
+        this.wsEntity.onopen = () => {
             var sayWhat = 'open..';
             ipcRenderer.send('wsWin:connectStatus', { id: this.id, say: sayWhat });
             console.log('open..')
         };
-        this.entity.onclose = (e) => {
+        this.wsEntity.onclose = (e) => {
             console.log("closed...")
             var sayWhat = 'close..';
             ipcRenderer.send('wsWin:connectStatus', { id: this.id, say: sayWhat });
             console.log('close: reason' + e.data);
         };
-        this.entity.onmessage = (evt) => {
+        this.wsEntity.onmessage = (evt) => {
             var oriStr = evt.data;
             if (typeof (evt.data) != "string") {
                 var buffer_header = new Uint8Array(evt.data, 0, 13)
@@ -246,11 +209,11 @@ class WSObj extends baseObj {
                 if (str == "?Sys") {
                     if (oriStr.search("/?SysConnectInit=Got") != -1) {//start by ?Sys called systype
                         //writeToScreen('<span style="color: blue;">RESPONSE: ' + evt.data + '</span>');
-                        if (this.entity == undefined) {
+                        if (this.wsEntity == undefined) {
                             console.log("I do not know why");
                         } else {
                             // ?SysSetMethod = xxx & FromAlias=xxx & ToAlias=xx, xx, xx
-                            this.entity.send("?SysSetMethod=ImgRetransmission");//这里简略的认为绝对成功，实际上是有问题的
+                            this.wsEntity.send("?SysSetMethod=ImgRetransmission");//这里简略的认为绝对成功，实际上是有问题的
                         }
                     }
                 }
@@ -260,9 +223,9 @@ class WSObj extends baseObj {
 
         }
 
-        this.entity.onerror = (evt) => {
+        this.wsEntity.onerror = (evt) => {
             console.log(evt.data);
-            this.entity.close();
+            this.wsEntity.close();
         };
         console.log("init complete..");
     };
@@ -271,9 +234,9 @@ class WSObj extends baseObj {
         var mF = document.getElementById(id);
         // console.log(" shower:", mF);
         if (mF == null) {
-            if (this.entity != null) {
-                this.entity.close();
-                this.entity = null;
+            if (this.wsEntity != null) {
+                this.wsEntity.close();
+                this.wsEntity = null;
             }
         }
         var blob = new Blob([Img], { type: "image/jpeg" });
@@ -283,6 +246,7 @@ class WSObj extends baseObj {
         mF.src = url;
         // mF.src = ImgUrl.url.blob;
     }
+
 };
 
 
