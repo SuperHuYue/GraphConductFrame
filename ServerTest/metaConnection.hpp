@@ -4,7 +4,7 @@
 元连接模块，代表一个连接，里面包含了单独连接所有的内容，每一个活动连接均会开启一个线程进行数据处理与通讯
 目前的设置就是，一旦设置好了method那么该对应连接的所有通讯都会以设置好的策略进行
 */
-
+extern class ControlModule;
 class metaConnection {
 public:
 	enum class connectionStatus {
@@ -19,7 +19,7 @@ public:
 	/*
 	MSG_MAX: 缓存中所保存的最大数据数量，超过该数量则会清空缓存
 	*/
-	metaConnection(server& ser, websocketpp::connection_hdl hdl, const int& MSG_MAX = 1000, Method a = Method::UNDEFINED) :m_hdl(hdl), m_status(connectionStatus::OPEN), m_method(a), m_endPoint(ser), FRAMEPOOLMAXSIZE(MSG_MAX) {
+	metaConnection(server& ser, websocketpp::connection_hdl hdl, const int& MSG_MAX = 1000, Method a = Method::UNDEFINED) :m_hdl(hdl), m_status(connectionStatus::OPEN), m_method(a), m_endpoint(ser), FRAMEPOOLMAXSIZE(MSG_MAX) {
 		m_alias = "undefined";//昵称（别名的未定义状态）
 		m_thrEndLabel = false;
 		start();
@@ -43,12 +43,10 @@ public:
 				switch (m_method)
 				{
 				case Method::IMG_RETRANSMISSION:
-					for (auto i : m_toMetaCon) {
-						if (!i.expired()) {
-							auto tar = i.lock();
-							//tar->SendTo()
-							tar->SentBinary(sinFrame);
-						}
+					for (auto i : m_toMetaCon) 
+					{
+						i->SentBinary(sinFrame);
+						//	i->SentBinary(sinFrame);
 					}
 					break;
 				default:
@@ -83,7 +81,7 @@ public:
 	void SendTo(const std::string& msg) {
 		if (m_status != connectionStatus::OPEN)return;
 		websocketpp::lib::error_code ec;
-		m_endPoint.send(m_hdl, msg, websocketpp::frame::opcode::text, ec);
+		m_endpoint.send(m_hdl, msg, websocketpp::frame::opcode::text, ec);
 		if (ec) {
 			std::cout << "> Error send: " << msg
 				<< ec.message() << std::endl;
@@ -94,7 +92,7 @@ public:
 		if (m_status != connectionStatus::OPEN)return;
         websocketpp::lib::error_code ec;
 		std::vector<uint8_t> biMsg(msg.begin(), msg.end());
-        m_endPoint.send(m_hdl, biMsg.data(), biMsg.size(), websocketpp::frame::opcode::BINARY,ec);
+		m_endpoint.send(m_hdl, biMsg.data(), biMsg.size(), websocketpp::frame::opcode::BINARY,ec);
         if (ec) {
             std::cout << "> Error sending binary: " << ec.message() << std::endl;
 			m_status = connectionStatus::CLOSE;
@@ -129,18 +127,46 @@ public:
 		}
 		return true;
 	}
+	inline void setStatus(connectionStatus status) {
+		m_status = status;
+	}
+	inline connectionStatus getStatus() {
+		return m_status;
+	}
+	inline websocketpp::connection_hdl getHdl() {
+		return m_hdl;
+	}
 
-
+	inline void addMetaCon(websocketpp::lib::shared_ptr<metaConnection> a) {
+		m_toMetaCon.push_back(a);
+	}
+	inline std::list<websocketpp::lib::shared_ptr<metaConnection>> getMetaCon() {
+		return m_toMetaCon;
+	}
+	inline void replaceMetaCon(const std::string& alias, websocketpp::lib::shared_ptr<metaConnection>ptr) {
+		std::lock_guard lk(m_lock);
+		for (auto i = m_toMetaCon.begin(); i != m_toMetaCon.end();++i) {
+			std::string name;
+			if ((*i)->getName(name)) {
+				if (!name.compare(alias)) {
+					//查找到对象 ,替换
+					*i = ptr;
+					break;
+				}
+			}
+		}
+	}
+private:
+	server& m_endpoint;
+	const int FRAMEPOOLMAXSIZE;
 	std::mutex m_lock;
 	connectionStatus m_status;
-	std::list<websocketpp::lib::weak_ptr<metaConnection>>m_toMetaCon;//需要进行通讯的连接
-	Method m_method;
-	websocketpp::connection_hdl m_hdl;//代表自身的连接
-private:
 	std::thread m_thread;
 	bool m_thrEndLabel;
-	server& m_endPoint;
-	const int FRAMEPOOLMAXSIZE;
 	std::list<std::string>m_framePool;
-	std::string m_alias;//初始为undefined
+	std::string m_alias;//初始为undefined,代表自己的名字
+	std::list<websocketpp::lib::shared_ptr<metaConnection>>m_toMetaCon;//需要进行通讯的连接
+	std::vector<std::string> m_toAlias;
+	Method m_method;
+	websocketpp::connection_hdl m_hdl;//代表自身的连接
 };

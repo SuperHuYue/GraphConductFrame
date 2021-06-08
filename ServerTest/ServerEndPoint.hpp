@@ -7,10 +7,153 @@
 const int CLIENT_FULL_ERR = -1;
 const int ALIAS_DUPLICATE = -2;
 
+struct ControlModule {
+    ControlModule(server& ser):m_endpoint(ser),m_thrEndLabel(false)
+    {
+        m_thrConMaintain = std::thread([&]() {
+            while (true)
+            {
+                if (m_thrEndLabel) {
+                    break;
+                }
+                for (auto i : m_hdl2con) {
+                    auto con = i.second;
+                    //外部处于连接态对象才会被维护
+                    if (con->getStatus() == metaConnection::connectionStatus::OPEN) {
+						auto innerMetaCon = con->getMetaCon();
+                        for (auto j = innerMetaCon.begin(); j != innerMetaCon.end(); ++j) {
+                            //查找连接态中是否有close状态内容 
+                            if ((*j)->getStatus() == metaConnection::connectionStatus::CLOSE) {
+                                std::string name;
+                                if ((*j)->getName(name)) {
+                                    //查找该名字的外部内容是否为open，如为open则代表有新对象进入，需要更新
+                                    auto out = queryConUsingAlisa(name);
+                                    if (out.first) {
+                                        if (out.second->getStatus() == metaConnection::connectionStatus::OPEN) {
+                                            // 替换
+                                            con->replaceMetaCon(name, out.second);
+                                        }
+                                    }
+                                    else {
+                                        continue;
+                                    }
+                                }
+                                else {
+                                    continue;//查找名字出错
+                                }
+                            }
+                        }
+                    }
+			    }
+                std::this_thread::yield();
+            }
+		});
+    };
+    ~ControlModule() {
+        stopThr();
+    };
+    void stopThr(){
+        m_thrEndLabel = true;
+        if (m_thrConMaintain.joinable()) {
+            m_thrConMaintain.join();
+        }
+    }
+
+    //分配ID号并且存储内容,每一次增加新的连接都会对现存connection进行检测, 并分析重名内容是否close如果为close状态则清空缓存
+    inline std::pair<bool, int> AddConnection(std::string& alias, websocketpp::connection_hdl hdl)
+    {
+        ////////////////////////////////////////////////////////////////////////////////////////////////////
+        clearCon(alias);
+        std::lock_guard<std::mutex> lk(m_lock);
+        if (m_alias2con.find(alias) == m_alias2con.end())
+        {
+            m_alias2con[alias] = websocketpp::lib::shared_ptr<metaConnection>(new metaConnection(m_endpoint, hdl));
+            m_hdl2con[hdl] = m_alias2con[alias];
+            m_hdl2con[hdl]->setName(alias);
+        }
+        else
+        {
+            return std::make_pair(false, ALIAS_DUPLICATE);
+        }
+        return std::make_pair(true, 0);
+    }
+    inline std::pair<bool, websocketpp::lib::shared_ptr<metaConnection>> queryConUsingAlisa(const std::string& alisa)
+    {
+        std::lock_guard<std::mutex> lk(m_lock);
+        if (m_alias2con.find(alisa) != m_alias2con.end())
+        {
+            return std::make_pair(true, m_alias2con[alisa]);
+        }
+        return std::make_pair(false, nullptr);
+    }
+    //不设定为清空所有，否则仅仅清空对应alias的内容
+    inline void clearCon(const std::string alias = "undefined")
+    {
+        std::lock_guard<std::mutex> lk(m_lock);
+        if (!alias.compare("undefined"))
+        {
+            //清空所有close的连接
+            for (auto i : m_alias2con)
+            {
+                auto con = i.second;
+                if (m_hdl2con.find(con->getHdl()) != m_hdl2con.end())
+                {
+                    if (con->getStatus() == metaConnection::connectionStatus::CLOSE)
+                    {
+                        m_hdl2con.clear();
+                        m_alias2con.clear();
+                    }
+                }
+            }
+        }
+        else
+        {
+            if (m_alias2con.find(alias) != m_alias2con.end())
+            {
+                auto sin_con = m_alias2con[alias];
+                if (m_hdl2con.find(sin_con->getHdl()) != m_hdl2con.end())
+                {
+                    if (sin_con->getStatus()== metaConnection::connectionStatus::CLOSE)
+                    {
+                        m_hdl2con.erase(sin_con->getHdl());
+                        m_alias2con.erase(alias);
+                    }
+                }
+                else
+                {
+                    throw std::runtime_error("Err no clearCon don't have equal...");
+                }
+            }
+        }
+    }
+
+    inline std::pair<bool, websocketpp::lib::shared_ptr<metaConnection>>
+        queryConUsingHdl(websocketpp::connection_hdl hdl)
+    {
+        std::lock_guard<std::mutex> lk(m_lock);
+        if (m_hdl2con.find(hdl) != m_hdl2con.end())
+        {
+            return std::make_pair(true, m_hdl2con[hdl]);
+        }
+        return std::make_pair(false, nullptr);
+    }
+    //维护连接线程，负责维护对象的连接状态以及新加入的对象的处理,目前是以轮询的方式进行，会有效率问题
+    std::thread m_thrConMaintain;
+    bool m_thrEndLabel;
+    //
+    server& m_endpoint;
+    std::mutex m_lock;                                                                         //用于维护m_alias2con和m_hdl2con
+    std::unordered_map<std::string, websocketpp::lib::shared_ptr<metaConnection>> m_alias2con; //别名到con
+    std::map<websocketpp::connection_hdl, websocketpp::lib::shared_ptr<metaConnection>, std::owner_less<websocketpp::connection_hdl>> m_hdl2con;
+};
+
+
+
+
 class ServerEndPoint
 {
 public:
-    ServerEndPoint(const int &MAX_CONNECT = 200)
+    ServerEndPoint(const int &MAX_CONNECT = 200):m_control(m_endpoint)
     {
         //regist handler
         //websocketpp::lib::shared_ptr<ServerGate> m_serverGate(new ServerGate(m_endpoint, MAX_CONNECT,  m_memCon));
@@ -45,7 +188,7 @@ public:
         {
             alias = keyValue["Alias"].front();
         }
-        auto out = AddConnection(alias, hdl);
+        auto out = m_control.AddConnection(alias, hdl);
         if (!out.first)
         {
             std::ostringstream str;
@@ -72,7 +215,7 @@ public:
     {
         if (sysMessageconduct(hdl, msg))
             return;
-        auto con = queryConUsingHdl(hdl);
+        auto con = m_control.queryConUsingHdl(hdl);
         if (con.first)
         {
             auto meta = con.second;
@@ -87,31 +230,12 @@ public:
 
     void on_close(websocketpp::connection_hdl hdl)
     {
-        std::lock_guard<std::mutex> lk(m_lock);
-        //check which one close
-        if (m_hdl2con.find(hdl) != m_hdl2con.end())
-        {
-            m_hdl2con[hdl]->m_status = metaConnection::connectionStatus::CLOSE; //仅仅做关闭flag
+        auto out = m_control.queryConUsingHdl(hdl);
+        if (out.first) {
+            out.second->setStatus(metaConnection::connectionStatus::CLOSE);
         }
         return;
-        //定期维护连接状态
-        //while (true) {
-        //    bool collected = false;
-        //    for (auto& i : m_id2Obj) {
-        //        auto& con_obj = i.second;
-        //        auto sin_con = m_s.get_con_from_hdl(con_obj->get_hdl());
-        //        if (websocketpp::session::state::value::closed == sin_con->get_state()) {
-        //            m_id2Obj[i.first]->m_status = connection_metadata::status::CLOSE;
-        //            std::string tmp = i.second->GetName();
-        //            addRetrieveIdPool(i.first, tmp);
-        //            collected = true;
-        //            break;
-        //        }
-        //    }
-        //    if (!collected)break;
-        //}
-        //end
-    }
+	}
 
     /////////////////////////////////////////////////////////////////////////////////////////
     //
@@ -126,7 +250,7 @@ public:
         // Start the Asio io_service run loop
         m_endpoint.run();
     }
-
+    server m_endpoint;
 private:
     bool sysMessageconduct(websocketpp::connection_hdl hdl, server::message_ptr msg)
     {
@@ -149,7 +273,7 @@ private:
                       key_value_pair.find("ToAlisa") != key_value_pair.end()*/
                     auto method = key_value_pair[command].front();
                     //auto fromCon = conList.front();
-                    auto fromCon = queryConUsingHdl(hdl);
+                    auto fromCon = m_control.queryConUsingHdl(hdl);
                     std::ostringstream str;
                     if (fromCon.first)
                     {
@@ -160,10 +284,10 @@ private:
                             auto toAlisa = key_value_pair["ToAlisa"];
                             for (auto i : toAlisa)
                             {
-                                auto sinToCon = queryConUsingAlisa(i);
+                                auto sinToCon = m_control.queryConUsingAlisa(i);
                                 if (sinToCon.first)
                                 {
-                                    fromCon.second->m_toMetaCon.push_back(sinToCon.second);
+                                    fromCon.second->addMetaCon(sinToCon.second);
                                 }
                             }
                         }
@@ -186,88 +310,5 @@ private:
         }
         return false;
     }
-
-    //分配ID号并且存储内容,每一次增加新的连接都会对现存connection进行检测, 并分析重名内容是否close如果为close状态则清空缓存
-    inline std::pair<bool, int> AddConnection(std::string &alias, websocketpp::connection_hdl hdl)
-    {
-        ////////////////////////////////////////////////////////////////////////////////////////////////////
-        clearCon(alias);
-        std::lock_guard<std::mutex> lk(m_lock);
-        if (m_alias2con.find(alias) == m_alias2con.end())
-        {
-            m_alias2con[alias] = websocketpp::lib::shared_ptr<metaConnection>(new metaConnection(m_endpoint, hdl));
-            m_hdl2con[hdl] = m_alias2con[alias];
-            m_hdl2con[hdl]->setName(alias);
-        }
-        else
-        {
-            return std::make_pair(false, ALIAS_DUPLICATE);
-        }
-        return std::make_pair(true, 0);
-    }
-    inline std::pair<bool, websocketpp::lib::shared_ptr<metaConnection>> queryConUsingAlisa(const std::string &alisa)
-    {
-        std::lock_guard<std::mutex> lk(m_lock);
-        if (m_alias2con.find(alisa) != m_alias2con.end())
-        {
-            return std::make_pair(true, m_alias2con[alisa]);
-        }
-        return std::make_pair(false, nullptr);
-    }
-    //不设定为清空所有，否则仅仅清空对应alias的内容
-    inline void clearCon(const std::string alias = "undefined")
-    {
-        std::lock_guard<std::mutex> lk(m_lock);
-        if (!alias.compare("undefined"))
-        {
-            //清空所有close的连接
-            for (auto i : m_alias2con)
-            {
-                auto con = i.second;
-                if (m_hdl2con.find(con->m_hdl) != m_hdl2con.end())
-                {
-                    if (con->m_status == metaConnection::connectionStatus::CLOSE)
-                    {
-                        m_hdl2con.clear();
-                        m_alias2con.clear();
-                    }
-                }
-            }
-        }
-        else
-        {
-            if (m_alias2con.find(alias) != m_alias2con.end())
-            {
-                auto sin_con = m_alias2con[alias];
-                if (m_hdl2con.find(sin_con->m_hdl) != m_hdl2con.end())
-                {
-                    if (sin_con->m_status == metaConnection::connectionStatus::CLOSE)
-                    {
-                        m_hdl2con.erase(sin_con->m_hdl);
-                        m_alias2con.erase(alias);
-                    }
-                }
-                else
-                {
-                    throw std::runtime_error("Err no clearCon don't have equal...");
-                }
-            }
-        }
-    }
-
-    inline std::pair<bool, websocketpp::lib::shared_ptr<metaConnection>>
-    queryConUsingHdl(websocketpp::connection_hdl hdl)
-    {
-        std::lock_guard<std::mutex> lk(m_lock);
-        if (m_hdl2con.find(hdl) != m_hdl2con.end())
-        {
-            return std::make_pair(true, m_hdl2con[hdl]);
-        }
-        return std::make_pair(false, nullptr);
-    }
-
-    std::mutex m_lock;                                                                         //用于维护m_alias2con和m_hdl2con
-    std::unordered_map<std::string, websocketpp::lib::shared_ptr<metaConnection>> m_alias2con; //别名到con
-    std::map<websocketpp::connection_hdl, websocketpp::lib::shared_ptr<metaConnection>, std::owner_less<websocketpp::connection_hdl>> m_hdl2con;
-    server m_endpoint;
+    ControlModule m_control;
 };
