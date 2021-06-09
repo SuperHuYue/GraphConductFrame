@@ -22,8 +22,9 @@ function wsCloseAll(method = 'ws') {
         }
     }
 }
+
+
 function connect(tar, id, ip, port, method = 'ws') {
-    console.log(ip + ", " + port);
     //tar实际上是一个字典, 代表的是id号和对应的对象
     if (tar == null) {
         tar = {};
@@ -35,6 +36,11 @@ function connect(tar, id, ip, port, method = 'ws') {
             tar[id] = new WSObj(id, ip, port, "?Alias");
         }
         tar[id].start();
+    }
+}
+function disConnect(tar, id) {
+    if ((id in tar)) {
+        tar[id].stop();
     }
 }
 
@@ -84,7 +90,6 @@ ipcRenderer.on('divShowWin:row', (e, row) => {
         let cols = rows[sin].childNodes;
         for (let img_idx = 0; img_idx < cols.length; ++img_idx) {
             let img = cols[img_idx]
-            console.log('fuck: ', img.id)
             now_valid_id.push(img.id)
         }
     }
@@ -153,12 +158,18 @@ ipcRenderer.on('divShowWin:idxCol', (e, idxcol) => {
     }
 });
 
+ipcRenderer.on('wsWin:disConnect', (e, data) => {
+    var id = data.wsWinIdentify;
+    console.log("close: ", id);
+    disConnect(showObjs, id);
+    //connect(showObjs, id, ip, port);
+});
 
 ipcRenderer.on('wsWin:Connect', (e, data) => {
-    console.log(data);
     var id = data.wsWinIdentify;
     var ip = data.wsIP;
     var port = data.wsPort;
+    console.log("ipcRederConnect : ", data);
     connect(showObjs, id, ip, port);
 });
 

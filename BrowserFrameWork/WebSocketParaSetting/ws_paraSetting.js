@@ -22,12 +22,20 @@ ipcRenderer.on('wsWin:connectStatus', (e, data) => {
 });
 
 
-var btn = document.getElementById("wsConnect");
-btn.addEventListener('click', (e) => {
+var btn_connect = document.getElementById("wsConnect");
+btn_connect.addEventListener('click', (e) => {
     var wsIP = document.querySelector('#wsIP').value;
     var wsPort = document.querySelector('#wsPort').value;
     console.log('wsIP:' + wsIP + 'wsPort' + wsPort);
     ipcRenderer.send('wsWin:Connect', { wsWinIdentify, wsIP, wsPort });
+})
+
+var btn_disconnect = document.getElementById("wsDisConnect");
+btn_disconnect.addEventListener('click', (e) => {
+    // var wsIP = document.querySelector('#wsIP').value;
+    // var wsPort = document.querySelector('#wsPort').value;
+    // console.log('wsIP:' + wsIP + 'wsPort' + wsPort);
+    ipcRenderer.send('wsWin:disConnect', { wsWinIdentify });
 })
 
 

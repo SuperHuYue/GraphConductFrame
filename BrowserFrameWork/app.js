@@ -168,6 +168,9 @@ ipcMain.on('wsWin:Connect', (e, data) => {
     mainWindow.webContents.send('wsWin:Connect', data);
 })
 
+ipcMain.on('wsWin:disConnect', (e, data) => {
+    mainWindow.webContents.send('wsWin:disConnect', data);
+})
 ipcMain.on('wsWin:connectStatus', (e, data) => {
     var img_id = data.id;
     var say = data.say;
@@ -176,6 +179,8 @@ ipcMain.on('wsWin:connectStatus', (e, data) => {
         tar_wsWin.webContents.send('wsWin:connectStatus', data);
     }
 })
-    //  id: this.id, say: sayWhat })
+
+
+// wsWin: disConnect
 
 ///end ipc
