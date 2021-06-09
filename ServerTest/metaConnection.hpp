@@ -40,19 +40,21 @@ public:
 					std::this_thread::yield();
 					continue;
 				}
-				switch (m_method)
 				{
-				case Method::IMG_RETRANSMISSION:
-					for (auto i : m_toMetaCon) 
+					std::lock_guard lk(m_lock);
+					switch (m_method)
 					{
-						i->SentBinary(sinFrame);
-						//	i->SentBinary(sinFrame);
+					case Method::IMG_RETRANSMISSION:
+						for (auto i : m_toMetaCon) 
+						{
+							i->SentBinary(sinFrame);
+						}
+						break;
+					default:
+						break;
 					}
-					break;
-				default:
-					break;
 				}
-
+				std::this_thread::yield();
 			}
 		}
 		);
@@ -138,6 +140,7 @@ public:
 	}
 
 	inline void addMetaCon(websocketpp::lib::shared_ptr<metaConnection> a) {
+		std::lock_guard lk(m_lock);
 		m_toMetaCon.push_back(a);
 	}
 	inline std::list<websocketpp::lib::shared_ptr<metaConnection>> getMetaCon() {
@@ -166,7 +169,7 @@ private:
 	std::list<std::string>m_framePool;
 	std::string m_alias;//初始为undefined,代表自己的名字
 	std::list<websocketpp::lib::shared_ptr<metaConnection>>m_toMetaCon;//需要进行通讯的连接
-	std::vector<std::string> m_toAlias;
+	//std::vector<std::string> m_toAlias;
 	Method m_method;
 	websocketpp::connection_hdl m_hdl;//代表自身的连接
 };
