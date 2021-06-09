@@ -22,19 +22,6 @@ function wsCloseAll(method = 'ws') {
         }
     }
 }
-////移除该ID，会使得在切分界面时候不会进行重连模块
-//function wsRemoveClientID(id) {
-//    if (showObjs != null) {
-//        for (let key in showObjs) {
-//            if (showObjs[key].entity != null && showObjs[ley] == id) {
-//                showObjs[key].entity.close();
-//                showObjs[key].entity = null;
-//                delete showObjs.key;
-//            }
-//        }
-//    }
-//}
-
 function connect(tar, id, ip, port, method = 'ws') {
     console.log(ip + ", " + port);
     //tar实际上是一个字典, 代表的是id号和对应的对象
@@ -182,10 +169,12 @@ class baseObj {
         this.id = null;
     }
     stop() {
-        //每一个都必须实现这个对象,代表停止该显示对象工作
+        //每一个都必须实现这个对象,代表停止该通讯对象工作
+        throw ('You must implement the stop method...')
     }
     start() {
-        //每一个对象都必须实现这个对象，代表开始该显示对象工作
+        //每一个对象都必须实现这个对象，代表停止该通讯对象工作
+        throw ('You must implement the start method...')
     }
 }
 
