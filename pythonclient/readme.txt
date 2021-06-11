@@ -1,0 +1,3 @@
+client_rec_send_demo.py 是使用海康威视实时拉取流
+client_rec_send_demo2.py 使用海康威视实时拉取流，同时使用dlib进行人脸检测
+client_send_pic+后缀.py 取回放数据并传送到显示框架中 

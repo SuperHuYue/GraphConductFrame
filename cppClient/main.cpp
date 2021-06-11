@@ -238,7 +238,7 @@ void main()
 	}
 	printf("Video Bitrate is %d\n", struParams.struNormHighRecordPara.dwVideoBitrate);
 	//---------------------------------------  
-	//设置异常消息回调函数  
+	//设置异常消息回调函数 
 	NET_DVR_SetExceptionCallBack_V30(0, NULL, g_ExceptionCallBack, NULL);
 
 
