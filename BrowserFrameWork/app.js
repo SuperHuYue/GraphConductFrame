@@ -181,6 +181,5 @@ ipcMain.on('wsWin:connectStatus', (e, data) => {
 })
 
 
-// wsWin: disConnect
 
 ///end ipc
