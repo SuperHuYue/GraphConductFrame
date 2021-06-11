@@ -64,6 +64,7 @@ public:
 		m_thread.join();
 	}
 	inline void SetMethod(const std::string& method) {
+		std::lock_guard lk(m_lock);
 		if (method == "ImgRetransmission") {
 			m_method = Method::IMG_RETRANSMISSION;
 		}
@@ -81,6 +82,7 @@ public:
 		return false;
 	}
 	void SendTo(const std::string& msg) {
+		std::lock_guard lk(m_lock);
 		if (m_status != connectionStatus::OPEN)return;
 		websocketpp::lib::error_code ec;
 		m_endpoint.send(m_hdl, msg, websocketpp::frame::opcode::text, ec);
@@ -91,6 +93,7 @@ public:
 		}
 	}
 	void SentBinary(const std::string& msg) {
+		std::lock_guard lk(m_lock);
 		if (m_status != connectionStatus::OPEN)return;
         websocketpp::lib::error_code ec;
 		std::vector<uint8_t> biMsg(msg.begin(), msg.end());
@@ -130,12 +133,15 @@ public:
 		return true;
 	}
 	inline void setStatus(connectionStatus status) {
+		std::lock_guard lk(m_lock);
 		m_status = status;
 	}
 	inline connectionStatus getStatus() {
+		std::lock_guard lk(m_lock);
 		return m_status;
 	}
 	inline websocketpp::connection_hdl getHdl() {
+		std::lock_guard lk(m_lock);
 		return m_hdl;
 	}
 
@@ -144,6 +150,7 @@ public:
 		m_toMetaCon.push_back(a);
 	}
 	inline std::list<websocketpp::lib::shared_ptr<metaConnection>> getMetaCon() {
+		std::lock_guard lk(m_lock);
 		return m_toMetaCon;
 	}
 	inline void replaceMetaCon(const std::string& alias, websocketpp::lib::shared_ptr<metaConnection>ptr) {
@@ -159,6 +166,52 @@ public:
 			}
 		}
 	}
+
+	/*
+	 查找该昵称是否出现在needConnectAlias中
+	 return value: 1:出现 0没有出现
+	*/
+	inline bool aliasInNeedConnectAlias(const std::string& alias) {
+		std::lock_guard lk(m_lock);
+		for (const auto& i : m_needConnectAlias) {
+			if (!i.compare(alias)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	inline std::vector<std::string> getNeedConnectAlias() {
+		std::lock_guard lk(m_lock);
+		return m_needConnectAlias;
+	}
+
+
+	inline void addNeedConnectAlias(const std::string& alias){
+		std::lock_guard lk(m_lock);
+		//check if exist
+		for (const auto& i : m_needConnectAlias) {
+			if (!i.compare(alias)) {
+				// 该名称已然存在
+				return;
+			}
+		}
+		m_needConnectAlias.push_back(alias);
+	}
+
+	/*
+	将昵称从needConnectAlias中移除
+	*/
+	inline void rmNeedConnectAlias(const std::string& alias) {
+		std::lock_guard lk(m_lock);
+		for (auto itr_begin = m_needConnectAlias.begin(); itr_begin != m_needConnectAlias.end(); itr_begin++) {
+			if (!alias.compare(*itr_begin)) {
+				m_needConnectAlias.erase(itr_begin);
+				break;
+			}
+		}
+		return;
+	}
 private:
 	server& m_endpoint;
 	const int FRAMEPOOLMAXSIZE;
@@ -169,7 +222,7 @@ private:
 	std::list<std::string>m_framePool;
 	std::string m_alias;//初始为undefined,代表自己的名字
 	std::list<websocketpp::lib::shared_ptr<metaConnection>>m_toMetaCon;//需要进行通讯的连接
-	//std::vector<std::string> m_toAlias;
+	std::vector<std::string> m_needConnectAlias;// 在设定方法的时候,该昵称的对象尚未连入网络，用于Control模块对后续接入进行维护
 	Method m_method;
 	websocketpp::connection_hdl m_hdl;//代表自身的连接
 };

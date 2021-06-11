@@ -13,38 +13,56 @@ struct ControlModule {
         m_thrConMaintain = std::thread([&]() {
             while (true)
             {
-                if (m_thrEndLabel) {
-                    break;
-                }
-                for (auto i : m_hdl2con) {
-                    auto con = i.second;
-                    //外部处于连接态对象才会被维护
-                    if (con->getStatus() == metaConnection::connectionStatus::OPEN) {
-						auto innerMetaCon = con->getMetaCon();
-                        for (auto j = innerMetaCon.begin(); j != innerMetaCon.end(); ++j) {
-                            //查找连接态中是否有close状态内容 
-                            if ((*j)->getStatus() == metaConnection::connectionStatus::CLOSE) {
-                                std::string name;
-                                if ((*j)->getName(name)) {
-                                    //查找该名字的外部内容是否为open，如为open则代表有新对象进入，需要更新
-                                    auto out = queryConUsingAlisa(name);
-                                    if (out.first) {
-                                        if (out.second->getStatus() == metaConnection::connectionStatus::OPEN) {
-                                            // 替换
-                                            con->replaceMetaCon(name, out.second);
-                                        }
-                                    }
-                                    else {
-                                        continue;
-                                    }
-                                }
-                                else {
-                                    continue;//查找名字出错
-                                }
+                {
+					std::lock_guard lk(m_lock);
+					if (m_thrEndLabel) {
+						break;
+					}
+					
+					for (auto i : m_hdl2con) {
+						auto con = i.second;
+						//维护类似重连状态的内容
+						//外部处于连接态对象才会被维护
+						if (con->getStatus() == metaConnection::connectionStatus::OPEN) {
+							auto innerMetaCon = con->getMetaCon();
+							for (auto j = innerMetaCon.begin(); j != innerMetaCon.end(); ++j) {
+								//查找连接态中是否有close状态内容 
+								if ((*j)->getStatus() == metaConnection::connectionStatus::CLOSE) {
+									std::string name;
+									if ((*j)->getName(name)) {
+										//查找该名字的外部内容是否为open，如为open则代表有新对象进入，需要更新
+										auto out = queryConUsingAlisa(name);
+										if (out.first) {
+											if (out.second->getStatus() == metaConnection::connectionStatus::OPEN) {
+												// 替换
+												con->replaceMetaCon(name, out.second);
+											}
+										}
+										else {
+											continue;
+										}
+									}
+									else {
+										continue;//查找名字出错
+									}
+								}
+							}
+						}
+						//维护需要进行连接的部分，处理目标进行连接时，需进行连接的对象尚未进入的问题
+						auto tmp = con->getNeedConnectAlias();
+						for (auto itr_name = tmp.begin(); itr_name != tmp.end(); ++itr_name) {
+                            auto out = queryConUsingAlisa(*itr_name);
+                            if (out.first) {
+                                // 对象已然连接,加入
+                                i.second->addMetaCon(out.second);
+                                // 将待定对象从needConnectAlias中移除
+                                con->rmNeedConnectAlias(*itr_name);
                             }
-                        }
-                    }
-			    }
+						}
+					}
+
+				}
+
                 std::this_thread::yield();
             }
 		});
@@ -64,7 +82,7 @@ struct ControlModule {
     {
         ////////////////////////////////////////////////////////////////////////////////////////////////////
         clearCon(alias);
-        std::lock_guard<std::mutex> lk(m_lock);
+        std::lock_guard< std::recursive_mutex> lk(m_lock);
         if (m_alias2con.find(alias) == m_alias2con.end())
         {
             m_alias2con[alias] = websocketpp::lib::shared_ptr<metaConnection>(new metaConnection(m_endpoint, hdl));
@@ -79,7 +97,7 @@ struct ControlModule {
     }
     inline std::pair<bool, websocketpp::lib::shared_ptr<metaConnection>> queryConUsingAlisa(const std::string& alisa)
     {
-        std::lock_guard<std::mutex> lk(m_lock);
+        std::lock_guard< std::recursive_mutex> lk(m_lock);
         if (m_alias2con.find(alisa) != m_alias2con.end())
         {
             return std::make_pair(true, m_alias2con[alisa]);
@@ -89,7 +107,7 @@ struct ControlModule {
     //不设定为清空所有，否则仅仅清空对应alias的内容
     inline void clearCon(const std::string alias = "undefined")
     {
-        std::lock_guard<std::mutex> lk(m_lock);
+        std::lock_guard< std::recursive_mutex> lk(m_lock);
         if (!alias.compare("undefined"))
         {
             //清空所有close的连接
@@ -130,7 +148,7 @@ struct ControlModule {
     inline std::pair<bool, websocketpp::lib::shared_ptr<metaConnection>>
         queryConUsingHdl(websocketpp::connection_hdl hdl)
     {
-        std::lock_guard<std::mutex> lk(m_lock);
+        std::lock_guard< std::recursive_mutex> lk(m_lock);
         if (m_hdl2con.find(hdl) != m_hdl2con.end())
         {
             return std::make_pair(true, m_hdl2con[hdl]);
@@ -142,7 +160,7 @@ struct ControlModule {
     bool m_thrEndLabel;
     //
     server& m_endpoint;
-    std::mutex m_lock;                                                                         //用于维护m_alias2con和m_hdl2con
+     std::recursive_mutex m_lock;                                                                         //用于维护m_alias2con和m_hdl2con
     std::unordered_map<std::string, websocketpp::lib::shared_ptr<metaConnection>> m_alias2con; //别名到con
     std::map<websocketpp::connection_hdl, websocketpp::lib::shared_ptr<metaConnection>, std::owner_less<websocketpp::connection_hdl>> m_hdl2con;
 };
@@ -288,6 +306,10 @@ private:
                                 if (sinToCon.first)
                                 {
                                     fromCon.second->addMetaCon(sinToCon.second);
+                                }
+                                else {
+                                    //设定之时，目标尚未连接入网,加入need模块 
+                                    fromCon.second->addNeedConnectAlias(i);
                                 }
                             }
                         }
